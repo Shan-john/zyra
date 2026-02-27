@@ -8,8 +8,8 @@ const connectDB = async () => {
     });
     logger.info(`MongoDB connected: ${conn.connection.host}`);
   } catch (error) {
-    logger.error(`MongoDB connection failed: ${error.message}`);
-    process.exit(1);
+    logger.warn(`MongoDB not running locally: ${error.message} - Starting in Demo Mode`);
+    // Removed process.exit(1) so the static AI Optimization dashboard can run without a DB
   }
 };
 
