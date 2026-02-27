@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Brain, Settings2, Factory, DollarSign, Activity, AlertTriangle, CheckCircle2, TrendingUp, ShieldAlert, HelpCircle, X } from "lucide-react";
+import { Brain, Settings2, Factory, DollarSign, Activity, AlertTriangle, CheckCircle2, TrendingUp, ShieldAlert, HelpCircle, X, Bell, BellRing, Zap, Wrench, ThumbsUp } from "lucide-react";
 import axios from "axios";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
@@ -22,6 +22,8 @@ export default function AiInsightsPage() {
 
   const [isComparing, setIsComparing] = useState(false);
   const [selectedTrace, setSelectedTrace] = useState(null);
+  const [notiOpen, setNotiOpen] = useState(false);
+  const [dismissed, setDismissed] = useState([]);
 
   useEffect(() => {
     fetchOptimization(weights);
@@ -33,7 +35,7 @@ export default function AiInsightsPage() {
       if (!data) setLoading(true);
       else setIsComparing(true);
 
-      const res = await axios.post("http://localhost:5000/api/schedule/optimize", currentWeights);
+      const res = await axios.post(`${import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api/v1"}/schedule/optimize`, currentWeights);
       const newData = res.data.data;
 
       if (data) setPrevData(data);
@@ -89,6 +91,31 @@ export default function AiInsightsPage() {
   const healthChartData = Object.keys(healthDist).map(k => ({ range: k, count: healthDist[k] }));
 
 
+  // ─── Build live notifications from machine utilization ─────────────────
+  const allAlerts = data ? data.machine_utilization.flatMap(m => {
+    const alerts = [];
+    const risk = Math.round(m.failure_probability * 100);
+    const health = 100 - risk;
+    if (m.failure_probability >= 0.7)
+      alerts.push({ id: `${m.machine_id}-critical`, type: "critical", icon: <AlertTriangle size={14} />, title: `CRITICAL: ${m.machine_name}`, body: `${risk}% failure probability. Immediate maintenance required before next shift.`, machine: m.machine_id });
+    else if (m.failure_probability >= 0.45)
+      alerts.push({ id: `${m.machine_id}-high`, type: "high", icon: <Zap size={14} />, title: `High Risk: ${m.machine_name}`, body: `${risk}% failure risk detected. Schedule preventive maintenance within 48 hours.`, machine: m.machine_id });
+    if (m.utilization_pct >= 95)
+      alerts.push({ id: `${m.machine_id}-overload`, type: "warning", icon: <Wrench size={14} />, title: `Overloaded: ${m.machine_name}`, body: `Machine utilization at ${m.utilization_pct}%. Risk of thermal overload — reduce job load.`, machine: m.machine_id });
+    if (m.maintenance_scheduled)
+      alerts.push({ id: `${m.machine_id}-maint`, type: "info", icon: <Wrench size={14} />, title: `Auto-Maintenance Injected: ${m.machine_name}`, body: `The AI engine inserted a preventive maintenance window due to ${risk}% failure risk.`, machine: m.machine_id });
+    return alerts;
+  }).filter(a => !dismissed.includes(a.id)) : [];
+
+  const criticalCount = allAlerts.filter(a => a.type === "critical" || a.type === "high").length;
+
+  const alertColors = {
+    critical: { wrap: "bg-danger-50 border-danger-300",  icon: "text-danger-600",  badge: "bg-danger-600" },
+    high:     { wrap: "bg-orange-50 border-orange-300",  icon: "text-orange-600", badge: "bg-orange-500" },
+    warning:  { wrap: "bg-warning-50 border-warning-300",icon: "text-warning-600",badge: "bg-warning-500" },
+    info:     { wrap: "bg-primary-50 border-primary-300",icon: "text-primary-600",badge: "bg-primary-500" },
+  };
+
   return (
     <div className="space-y-6 pb-12">
       <div className="flex items-center gap-3">
@@ -99,7 +126,57 @@ export default function AiInsightsPage() {
           <h1 className="text-2xl font-bold text-surface-900">AI Scheduling Management</h1>
           <p className="text-surface-600 mt-1">Multi-objective constraint solver. Adjust weights to see real-time tradeoff maps.</p>
         </div>
+        {/* Notification Bell */}
+        {data && (
+          <div className="relative">
+            <button
+              onClick={() => setNotiOpen(o => !o)}
+              className={`relative p-2 rounded-xl border transition-all ${criticalCount > 0 ? "bg-danger-50 border-danger-200 text-danger-600 animate-pulse" : notiOpen ? "bg-primary-50 border-primary-200 text-primary-600" : "bg-surface-100 border-transparent text-surface-600 hover:bg-surface-200"}`}
+            >
+              {criticalCount > 0 ? <BellRing size={20} /> : <Bell size={20} />}
+              {allAlerts.length > 0 && (
+                <span className={`absolute -top-1 -right-1 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full ${criticalCount > 0 ? "bg-danger-600" : "bg-primary-600"}`}>{allAlerts.length}</span>
+              )}
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* ─── Risk Notification Panel ──────────────────────────────────────── */}
+      {notiOpen && data && (
+        <div className="card border-l-4 border-danger-400 bg-surface-50 space-y-3">
+          <div className="flex justify-between items-center">
+            <h2 className="font-bold text-surface-900 flex items-center gap-2">
+              <BellRing size={18} className="text-danger-500" /> Live Risk Alerts
+              {criticalCount > 0 && <span className="text-xs bg-danger-600 text-white px-2 py-0.5 rounded-full font-medium">{criticalCount} urgent</span>}
+            </h2>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setDismissed(allAlerts.map(a => a.id))} className="text-xs text-surface-500 hover:text-surface-700 hover:underline">Dismiss all</button>
+              <button onClick={() => setNotiOpen(false)} className="p-1 bg-surface-200 hover:bg-surface-300 rounded-full text-surface-600"><X size={14} /></button>
+            </div>
+          </div>
+          {allAlerts.length === 0 && (
+            <div className="flex items-center gap-2 text-success-600 text-sm py-3">
+              <ThumbsUp size={16} /> All machines are operating within safe parameters.
+            </div>
+          )}
+          <div className="space-y-2">
+            {allAlerts.map(a => {
+              const c = alertColors[a.type];
+              return (
+                <div key={a.id} className={`flex items-start gap-3 p-3 rounded-lg border ${c.wrap}`}>
+                  <span className={`mt-0.5 ${c.icon} shrink-0`}>{a.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold text-surface-900">{a.title}</div>
+                    <div className="text-xs text-surface-600 mt-0.5">{a.body}</div>
+                  </div>
+                  <button onClick={() => setDismissed(p => [...p, a.id])} className="p-0.5 text-surface-400 hover:text-surface-600 shrink-0"><X size={12} /></button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative">
         

@@ -29,7 +29,7 @@ export default function DashboardPage() {
       setLoading(true);
       // Call the lightweight real-time scheduling API
       // It returns the schedule, deferred jobs, KPIs, and machine utilization
-      const res = await axios.post("http://localhost:5000/api/schedule/optimize", weights);
+      const res = await axios.post(`${import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api/v1"}/schedule/optimize`, weights);
       const data = res.data.data;
       setScheduleData(data);
 

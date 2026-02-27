@@ -3,14 +3,13 @@ const path = require("path");
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
-const requiredVars = ["MONGO_URI", "JWT_SECRET"];
-
-requiredVars.forEach((key) => {
-  if (!process.env[key]) {
-    console.error(`❌ Missing required env variable: ${key}`);
-    process.exit(1);
-  }
-});
+// Warn about missing optional vars - don't crash server in demo mode
+if (!process.env.MONGO_URI) {
+  console.warn("⚠️  MONGO_URI not set — running in AI Demo Mode (no database required)");
+}
+if (!process.env.GEMINI_API_KEY) {
+  console.warn("⚠️  GEMINI_API_KEY not set — ExplainabilityService will be unavailable");
+}
 
 module.exports = {
   PORT: process.env.PORT || 5000,

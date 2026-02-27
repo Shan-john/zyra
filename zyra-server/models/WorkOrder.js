@@ -2,27 +2,25 @@ const mongoose = require("mongoose");
 
 const workOrderSchema = new mongoose.Schema(
   {
-    orderNumber: { type: String, required: true, unique: true },
-    schedule: { type: mongoose.Schema.Types.ObjectId, ref: "ProductionSchedule" },
-    product: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
-    quantity: { type: Number, required: true, min: 1 },
-    completedQuantity: { type: Number, default: 0 },
-    defectQuantity: { type: Number, default: 0 },
+    orderNumber: { type: String, required: true, unique: true }, // e.g. "WO-1001"
+    job: { type: String, required: true }, // e.g. "Steel Frame Assembly"
+    machine: { type: String, required: true }, // e.g. "Assembly Line A"
+    hours: { type: Number, required: true, min: 1, default: 1 },
+    priority: {
+      type: String,
+      enum: ["High", "Medium", "Low"],
+      default: "Medium",
+    },
     status: {
       type: String,
-      enum: ["draft", "released", "in-progress", "completed", "closed"],
-      default: "draft",
+      enum: ["Queued", "In Progress", "Complete"],
+      default: "Queued",
     },
-    startDate: { type: Date },
-    dueDate: { type: Date, required: true },
-    completedDate: { type: Date },
-    assignedWorkers: [{ type: mongoose.Schema.Types.ObjectId, ref: "Employee" }],
-    instructions: { type: String },
   },
   { timestamps: true }
 );
 
 workOrderSchema.index({ orderNumber: 1 });
-workOrderSchema.index({ status: 1, dueDate: 1 });
+workOrderSchema.index({ status: 1, priority: 1 });
 
 module.exports = mongoose.model("WorkOrder", workOrderSchema);
