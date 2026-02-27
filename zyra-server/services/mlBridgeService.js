@@ -21,7 +21,7 @@ const mlClient = axios.create({
  */
 exports.predictFailure = async (features) => {
   try {
-    const response = await mlClient.post("/predict/failure", features);
+    const response = await mlClient.post("/predict", features);
     return response.data;
   } catch (error) {
     logger.error("ML prediction failed", {

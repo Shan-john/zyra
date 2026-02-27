@@ -1,0 +1,19 @@
+{
+  "accuracy": 0.81,
+  "f1_score": 0.8091,
+  "roc_auc": 0.901,
+  "train_samples": 4000,
+  "test_samples": 1000,
+  "feature_importance": {
+    "temperature": 0.2455,
+    "operating_hours": 0.195,
+    "vibration": 0.1215,
+    "age_months": 0.0803,
+    "load_percentage": 0.0778,
+    "pressure": 0.0647,
+    "maintenance_count": 0.0628,
+    "humidity": 0.0513,
+    "rpm": 0.0509,
+    "power_consumption": 0.0503
+  }
+}

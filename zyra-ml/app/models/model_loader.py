@@ -23,4 +23,39 @@ def load_model():
     global _model, _scaler, _metrics, _feature_names
 
     if os.path.exists(MODEL_PATH):
-        _model
+        _model = joblib.load(MODEL_PATH)
+        print(f"✅ Model loaded from {MODEL_PATH}")
+    else:
+        print("⚠️  No trained model found — run training pipeline first")
+        return False
+
+    if os.path.exists(SCALER_PATH):
+        _scaler = joblib.load(SCALER_PATH)
+        print(f"✅ Scaler loaded from {SCALER_PATH}")
+
+    if os.path.exists(METRICS_PATH):
+        with open(METRICS_PATH, "r") as f:
+            _metrics = json.load(f)
+        print(f"✅ Metrics loaded: Accuracy={_metrics.get('accuracy')}, F1={_metrics.get('f1_score')}, ROC-AUC={_metrics.get('roc_auc')}")
+
+    if os.path.exists(FEATURE_NAMES_PATH):
+        with open(FEATURE_NAMES_PATH, "r") as f:
+            _feature_names = json.load(f)
+
+    return True
+
+
+def get_model():
+    return _model
+
+
+def get_scaler():
+    return _scaler
+
+
+def get_metrics():
+    return _metrics
+
+
+def get_feature_names():
+    return _feature_names
