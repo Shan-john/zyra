@@ -1,17 +1,37 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronRight, Monitor, Settings, Shield, Target, Users, Bell, RefreshCw } from "lucide-react"
+import { ChevronRight, Monitor, Settings, Shield, Target, Users, Bell, RefreshCw, Cpu, Truck, ShoppingCart, DollarSign, CheckSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import CommandCenterPage from "./command-center/page"
 import AgentNetworkPage from "./agent-network/page"
 import OperationsPage from "./operations/page"
 import IntelligencePage from "./intelligence/page"
 import SystemsPage from "./systems/page"
+import ProductionPage from "./production/page"
+import SupplyChainPage from "./supply-chain/page"
+import SalesPage from "./sales/page"
+import HRPage from "./hr/page"
+import FinancePage from "./finance/page"
+import QualityPage from "./quality/page"
 
 export default function TacticalDashboard() {
   const [activeSection, setActiveSection] = useState("overview")
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  const sectionLabels: Record<string, string> = {
+    overview: "COMMAND CENTER",
+    agents: "AGENT NETWORK",
+    production: "PRODUCTION",
+    "supply-chain": "SUPPLY CHAIN",
+    sales: "SALES",
+    hr: "HUMAN RESOURCES",
+    finance: "FINANCE",
+    quality: "QUALITY ASSURANCE",
+    operations: "OPERATIONS",
+    intelligence: "INTELLIGENCE",
+    systems: "SYSTEMS",
+  }
 
   return (
     <div className="flex h-screen">
@@ -41,6 +61,12 @@ export default function TacticalDashboard() {
             {[
               { id: "overview", icon: Monitor, label: "COMMAND CENTER" },
               { id: "agents", icon: Users, label: "AGENT NETWORK" },
+              { id: "production", icon: Cpu, label: "PRODUCTION" },
+              { id: "supply-chain", icon: Truck, label: "SUPPLY CHAIN" },
+              { id: "sales", icon: ShoppingCart, label: "SALES" },
+              { id: "hr", icon: Users, label: "HUMAN RESOURCES" },
+              { id: "finance", icon: DollarSign, label: "FINANCE" },
+              { id: "quality", icon: CheckSquare, label: "QUALITY ASSURANCE" },
               { id: "operations", icon: Target, label: "OPERATIONS" },
               { id: "intelligence", icon: Shield, label: "INTELLIGENCE" },
               { id: "systems", icon: Settings, label: "SYSTEMS" },
@@ -87,7 +113,7 @@ export default function TacticalDashboard() {
         <div className="h-16 bg-neutral-800 border-b border-neutral-700 flex items-center justify-between px-6">
           <div className="flex items-center gap-4">
             <div className="text-sm text-neutral-400">
-              TACTICAL COMMAND / <span className="text-orange-500">OVERVIEW</span>
+              TACTICAL COMMAND / <span className="text-orange-500">{sectionLabels[activeSection]}</span>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -105,6 +131,12 @@ export default function TacticalDashboard() {
         <div className="flex-1 overflow-auto">
           {activeSection === "overview" && <CommandCenterPage />}
           {activeSection === "agents" && <AgentNetworkPage />}
+          {activeSection === "production" && <ProductionPage />}
+          {activeSection === "supply-chain" && <SupplyChainPage />}
+          {activeSection === "sales" && <SalesPage />}
+          {activeSection === "hr" && <HRPage />}
+          {activeSection === "finance" && <FinancePage />}
+          {activeSection === "quality" && <QualityPage />}
           {activeSection === "operations" && <OperationsPage />}
           {activeSection === "intelligence" && <IntelligencePage />}
           {activeSection === "systems" && <SystemsPage />}
