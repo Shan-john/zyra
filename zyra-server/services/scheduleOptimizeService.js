@@ -69,12 +69,24 @@ exports.optimize = ({ throughputWeight = 1, downtimeWeight = 0.8, maintenanceWei
   const jobs = SAMPLE_JOBS;
   const machines = SAMPLE_MACHINES;
 
+  // Tracking traces for Hackathon UI
+  const traces = {};
+  for (const job of jobs) {
+    traces[job.id] = { job_id: job.id, evaluations: [] };
+  }
+
   // ─── 1. Score all valid (job, machine) candidates ──────────────
   const candidates = [];
   for (const job of jobs) {
     for (const machine of machines) {
-      if (machine.type !== job.type) continue;
-      if (job.duration_hours > machine.capacity_hours_per_day) continue;
+      if (machine.type !== job.type) {
+        traces[job.id].evaluations.push(`[${machine.id}] ${machine.name}: ❌ Rejected (Type mismatch: ${machine.type} != ${job.type})`);
+        continue;
+      }
+      if (job.duration_hours > machine.capacity_hours_per_day) {
+        traces[job.id].evaluations.push(`[${machine.id}] ${machine.name}: ❌ Rejected (Job duration ${job.duration_hours}h > Machine daily cap ${machine.capacity_hours_per_day}h)`);
+        continue;
+      }
 
       const fp = machine.failure_probability;
       const downtimeRisk = fp * DOWNTIME_COST_PER_HOUR * job.duration_hours;
@@ -83,6 +95,7 @@ exports.optimize = ({ throughputWeight = 1, downtimeWeight = 0.8, maintenanceWei
       const score = W1 * job.revenue - W2 * downtimeRisk - W3 * mCost;
 
       candidates.push({ job, machine, score: r(score), fp, downtimeRisk: r(downtimeRisk) });
+      traces[job.id].evaluations.push(`[${machine.id}] ${machine.name}: ✓ Valid candidate. Score = ${r(score)} (Risk Cost: ${r(downtimeRisk)}, Maint: ${mCost})`);
     }
   }
 
@@ -100,9 +113,15 @@ exports.optimize = ({ throughputWeight = 1, downtimeWeight = 0.8, maintenanceWei
 
   const schedule = [];
   for (const c of candidates) {
-    if (assigned.has(c.job.id)) continue;
+    if (assigned.has(c.job.id)) {
+      traces[c.job.id].evaluations.push(`[${c.machine.id}] ${c.machine.name}: ⏭️ Skipped (Job already assigned to a higher scoring machine)`);
+      continue;
+    }
     const ms = machState[c.machine.id];
-    if (ms.used + c.job.duration_hours > ms.cap) continue;
+    if (ms.used + c.job.duration_hours > ms.cap) {
+      traces[c.job.id].evaluations.push(`[${c.machine.id}] ${c.machine.name}: ❌ Rejected (Insufficient capacity. Needs ${c.job.duration_hours}h, only ${ms.cap - ms.used}h left)`);
+      continue;
+    }
 
     const slotStart = ms.used;
     const slotEnd = slotStart + c.job.duration_hours;
@@ -123,6 +142,8 @@ exports.optimize = ({ throughputWeight = 1, downtimeWeight = 0.8, maintenanceWei
     assigned.add(c.job.id);
     ms.used = maint ? maint.end_hour : slotEnd;
     ms.slots.push(c.job.id);
+    
+    traces[c.job.id].decision_summary = `Assigned to ${c.machine.name} because it produced the highest valid optimization score (${c.score}). Risk Exposure: ₹${(c.downtimeRisk/1000).toFixed(1)}k.`;
 
     schedule.push({
       job_id: c.job.id,
@@ -137,18 +158,23 @@ exports.optimize = ({ throughputWeight = 1, downtimeWeight = 0.8, maintenanceWei
       failure_probability: r(c.fp, 4),
       downtime_risk: c.downtimeRisk,
       maintenance_window: maint,
+      decision_trace: traces[c.job.id]
     });
   }
 
   // ─── 3. Deferred jobs ──────────────────────────────────────────
   const deferred = jobs
     .filter((j) => !assigned.has(j.id))
-    .map((j) => ({
-      job_id: j.id,
-      job_name: j.name,
-      revenue_lost: j.revenue,
-      reason: machines.some((m) => m.type === j.type) ? "Machines at capacity" : "No matching machine type",
-    }));
+    .map((j) => {
+      traces[j.id].decision_summary = "Job was deferred. No machines had both matching type AND sufficient capacity remaining.";
+      return {
+        job_id: j.id,
+        job_name: j.name,
+        revenue_lost: j.revenue,
+        reason: machines.some((m) => m.type === j.type) ? "Machines at capacity" : "No matching machine type",
+        decision_trace: traces[j.id]
+      };
+    });
 
   // ─── 4. KPIs ──────────────────────────────────────────────────
   const totalRevenue = schedule.reduce((s, x) => s + x.revenue, 0);

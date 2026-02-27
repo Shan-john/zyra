@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Brain, Settings2, Factory, DollarSign, Activity, AlertTriangle, CheckCircle2, TrendingUp, ShieldAlert } from "lucide-react";
+import { Brain, Settings2, Factory, DollarSign, Activity, AlertTriangle, CheckCircle2, TrendingUp, ShieldAlert, HelpCircle, X } from "lucide-react";
 import axios from "axios";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
@@ -21,6 +21,7 @@ export default function AiInsightsPage() {
   });
 
   const [isComparing, setIsComparing] = useState(false);
+  const [selectedTrace, setSelectedTrace] = useState(null);
 
   useEffect(() => {
     fetchOptimization(weights);
@@ -216,7 +217,12 @@ export default function AiInsightsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {data.deferred_jobs.map(dj => (
                     <div key={dj.job_id} className="flex flex-col bg-white/60 p-2 rounded text-sm border border-danger-100">
-                      <span className="font-medium text-surface-800">{dj.job_name} <span className="text-surface-500 text-xs">({dj.job_id})</span></span>
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium text-surface-800">{dj.job_name} <span className="text-surface-500 text-xs">({dj.job_id})</span></span>
+                        <button onClick={() => setSelectedTrace(dj.decision_trace)} className="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1 font-medium bg-primary-50 px-2 py-0.5 rounded transition-colors">
+                          <HelpCircle size={12} /> Explain
+                        </button>
+                      </div>
                       <span className="text-xs text-danger-600 italic mt-0.5">{dj.reason}</span>
                     </div>
                   ))}
@@ -354,6 +360,9 @@ export default function AiInsightsPage() {
                                <Settings2 size={10} /> Auto-Maint
                              </span>
                            )}
+                           <button onClick={() => setSelectedTrace(job.decision_trace)} className="mt-1 text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1 font-medium bg-primary-50 px-2 py-0.5 rounded transition-colors">
+                             <HelpCircle size={12} /> Explain
+                           </button>
                         </div>
                       </td>
                     </tr>
@@ -365,6 +374,59 @@ export default function AiInsightsPage() {
 
         </div>
       </div>
+
+      {/* Decision Trace Modal */}
+      {selectedTrace && (
+        <div className="fixed inset-0 bg-surface-900/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-surface-50 p-4 border-b border-surface-200 flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-surface-900 flex items-center gap-2">
+                  <Brain className="text-primary-600" size={20} /> AI Decision Trace
+                </h3>
+                <p className="text-xs text-surface-600 mt-0.5">Job: {selectedTrace.job_name} ({selectedTrace.job_id})</p>
+              </div>
+              <button onClick={() => setSelectedTrace(null)} className="text-surface-500 hover:text-surface-700 p-1 bg-surface-100 rounded-full">
+                <X size={16} />
+              </button>
+            </div>
+            
+            <div className="p-4 overflow-y-auto space-y-4">
+              <div className="bg-primary-50 border border-primary-100 p-3 rounded-lg flex gap-3 items-start">
+                <CheckCircle2 className="text-primary-600 mt-0.5 shrink-0" size={18} />
+                <div>
+                  <div className="text-xs font-semibold text-primary-800 uppercase tracking-widest mb-1">Final Decision</div>
+                  <p className="text-sm text-primary-900">{selectedTrace.decision_summary}</p>
+                </div>
+              </div>
+              
+              <div>
+                <h4 className="text-sm font-semibold text-surface-900 mb-2 mt-4 px-1">Engine Evaluation Steps:</h4>
+                <div className="bg-surface-50 font-mono text-[11px] p-3 rounded-lg border border-surface-200 space-y-1.5 overflow-x-auto text-surface-700">
+                  {selectedTrace.evaluations.map((ev, i) => {
+                    const isRejected = ev.includes("❌ Rejected");
+                    const isSkipped = ev.includes("⏭️ Skipped");
+                    return (
+                      <div key={i} className={`py-1 ${isRejected ? 'text-danger-700 bg-danger-50/50 px-1 rounded' : isSkipped ? 'text-surface-500' : 'text-success-700 bg-success-50/50 px-1 rounded font-semibold'}`}>
+                        {ev}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <div className="p-3 bg-surface-50 border-t border-surface-200 text-xs text-surface-500 flex justify-between items-center">
+              <span>Trace generated by constraints & scoring module</span>
+              <button 
+                onClick={() => setSelectedTrace(null)} 
+                className="bg-primary-600 text-white py-1.5 px-4 rounded text-xs font-semibold hover:bg-primary-700 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
