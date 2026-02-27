@@ -43,4 +43,31 @@ async function generateContent(prompt) {
   }
 }
 
-module.exports = { generateContent };
+/**
+ * Generate structured JSON content using Gemini.
+ * @param {string} prompt - The prompt to send
+ * @returns {Promise<Object>} - Parsed JSON object
+ */
+async function generateJsonContent(prompt) {
+  try {
+    if (!model) getModel();
+    
+    // We override the generation config per-request to enforce JSON
+    const jsonModel = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      generationConfig: {
+        temperature: 0.2, // lower temp for more deterministic JSON
+        responseMimeType: "application/json",
+      },
+    });
+
+    const result = await jsonModel.generateContent(prompt);
+    const responseText = result.response.text();
+    return JSON.parse(responseText);
+  } catch (error) {
+    logger.error("Gemini structured JSON generation failed", { error: error.message });
+    throw error;
+  }
+}
+
+module.exports = { generateContent, generateJsonContent };

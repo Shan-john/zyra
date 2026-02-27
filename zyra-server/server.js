@@ -30,6 +30,7 @@ const aiRoutes = require("./routes/aiRoutes");
 const maintenanceSimRoutes = require("./routes/maintenanceSimRoutes");
 const schedulingRoutes = require("./routes/schedulingRoutes");
 const scheduleOptimizeRoutes = require("./routes/scheduleOptimizeRoutes");
+const explainabilityRoutes = require("./routes/explainabilityRoutes");
 
 // Import background jobs
 const reorderAlertJob = require("./jobs/reorderAlertJob");
@@ -68,6 +69,7 @@ app.use("/api/v1/simulation", simulationRoutes);
 app.use("/api/v1/ai", aiRoutes);
 app.use("/api/v1/maintenance", maintenanceSimRoutes);
 app.use("/api/v1/scheduling", schedulingRoutes);
+app.use("/api/v1/explainability", explainabilityRoutes);
 app.use("/api/schedule", scheduleOptimizeRoutes); // Real-time dash endpoint
 
 // ─── 404 Handler ───────────────────────────────────────────
