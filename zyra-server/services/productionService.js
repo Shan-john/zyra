@@ -1,43 +1,56 @@
 const ProductionSchedule = require("../models/ProductionSchedule");
-const WorkOrder = require("../models/WorkOrder");
 const BillOfMaterials = require("../models/BillOfMaterials");
-const Machine = require("../models/Machine");
 
-// ─── Machines ────────────────────────────────────────────────────────────────
+const { db } = require("../config/firebase");
+const { ref, get, set, remove, child } = require("firebase/database");
+
+// ─── Machines (FIREBASE) ───────────────────────────────────────────────────
 exports.getMachines = async (query = {}) => {
-  let machines = await Machine.find(query).sort({ machineId: 1 }).lean();
+  const dbRef = ref(db);
+  const snapshot = await get(child(dbRef, "machines"));
+  let machines = [];
+
+  if (snapshot.exists()) {
+    const data = snapshot.val();
+    machines = Object.values(data).sort((a, b) => a.machineId.localeCompare(b.machineId));
+  }
 
   // Seed default data if database is empty
   if (machines.length === 0) {
-    const MACHINE_SEED = require("../data/machineSeed"); // We'll create this temporarily below, or just inline it
-    await Machine.insertMany(MACHINE_SEED);
-    machines = await Machine.find(query).sort({ machineId: 1 }).lean();
+    const MACHINE_SEED = require("../data/machineSeed");
+    for (const m of MACHINE_SEED) {
+      await set(ref(db, "machines/" + m.machineId), m);
+    }
+    machines = MACHINE_SEED.sort((a, b) => a.machineId.localeCompare(b.machineId));
   }
   return machines;
 };
 
 exports.createMachine = async (data) => {
-  return Machine.create(data);
+  await set(ref(db, "machines/" + data.machineId), data);
+  return data;
 };
 
 exports.updateMachine = async (id, data) => {
-  const machine = await Machine.findOneAndUpdate({ machineId: id }, data, { new: true });
-  // Fallback to _id if machineId wasn't used
-  if (!machine) {
-    return Machine.findByIdAndUpdate(id, data, { new: true });
-  }
-  return machine;
+  await set(ref(db, "machines/" + id), data);
+  return data;
 };
 
 exports.deleteMachine = async (id) => {
-  let result = await Machine.findOneAndDelete({ machineId: id });
-  if (!result) result = await Machine.findByIdAndDelete(id);
-  return result;
+  await remove(ref(db, "machines/" + id));
+  return { deleted: true };
 };
 
-// ─── Work Orders ─────────────────────────────────────────────────────────────
+// ─── Work Orders (FIREBASE) ─────────────────────────────────────────────────
 exports.getWorkOrders = async (query = {}) => {
-  let workOrders = await WorkOrder.find(query).sort({ dueDate: 1, orderNumber: 1 }).lean();
+  const dbRef = ref(db);
+  const snapshot = await get(child(dbRef, "workOrders"));
+  let workOrders = [];
+
+  if (snapshot.exists()) {
+    const data = snapshot.val();
+    workOrders = Object.values(data).sort((a, b) => a.orderNumber.localeCompare(b.orderNumber));
+  }
 
   // Seed default data if database is empty
   if (workOrders.length === 0) {
@@ -48,29 +61,30 @@ exports.getWorkOrders = async (query = {}) => {
       { orderNumber: "WO-1004", job: "Aluminum Die Casting", machine: "Casting Station", hours: 5, priority: "Low", status: "Queued" },
       { orderNumber: "WO-1005", job: "Surface Heat Treatment", machine: "Heat Treatment Oven", hours: 6, priority: "Medium", status: "Complete" },
     ];
-    await WorkOrder.insertMany(WORK_ORDER_SEED);
-    workOrders = await WorkOrder.find(query).sort({ orderNumber: 1 }).lean();
+    for (const wo of WORK_ORDER_SEED) {
+      await set(ref(db, "workOrders/" + wo.orderNumber), wo);
+    }
+    workOrders = WORK_ORDER_SEED.sort((a, b) => a.orderNumber.localeCompare(b.orderNumber));
   }
   return workOrders;
 };
 
 exports.createWorkOrder = async (data) => {
-  return WorkOrder.create(data);
+  await set(ref(db, "workOrders/" + data.orderNumber), data);
+  return data;
 };
 
 exports.updateWorkOrder = async (id, data) => {
-  let wo = await WorkOrder.findOneAndUpdate({ orderNumber: id }, data, { new: true });
-  if (!wo) wo = await WorkOrder.findByIdAndUpdate(id, data, { new: true });
-  return wo;
+  await set(ref(db, "workOrders/" + id), data);
+  return data;
 };
 
 exports.deleteWorkOrder = async (id) => {
-  let wo = await WorkOrder.findOneAndDelete({ orderNumber: id });
-  if (!wo) wo = await WorkOrder.findByIdAndDelete(id);
-  return wo;
+  await remove(ref(db, "workOrders/" + id));
+  return { deleted: true };
 };
 
-// ─── Production Schedules ────────────────────────────────────────────────────
+// ─── Production Schedules (MONGOOSE) ────────────────────────────────────
 exports.getSchedules = async ({ page = 1, limit = 20, status, line }) => {
   const query = {};
   if (status) query.status = status;
@@ -92,7 +106,7 @@ exports.createSchedule = async (data) => {
   return ProductionSchedule.create(data);
 };
 
-// ─── Bill of Materials ───────────────────────────────────────────────────────
+// ─── Bill of Materials (MONGOOSE) ─────────────────────────────────────────
 exports.getBom = async (productId) => {
   const bom = await BillOfMaterials.findOne({ product: productId, isActive: true })
     .populate("items.material", "name sku unitPrice unit")

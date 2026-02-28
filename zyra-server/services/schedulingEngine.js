@@ -143,7 +143,15 @@ exports.optimize = async (input) => {
 
     // Constraint 5: schedule maintenance if risk is high and not yet scheduled
     let maintenanceWindow = null;
-    if (failure_probability > 0.5 && !ms.maintenance_scheduled && machine.maintenance_duration_hours) {
+    let actualFP = failure_probability;
+    let actualDowntimeRisk = downtime_risk;
+
+    if (ms.maintenance_scheduled) {
+      // Machine was ALREADY fixed in a previous slot. Risk is eliminated for this and subsequent jobs!
+      actualFP = 0.01; // nominal baseline risk
+      actualDowntimeRisk = actualFP * costs.downtime_cost_per_hour * job.duration_hours;
+    } else if (failure_probability > 0.5 && machine.maintenance_duration_hours) {
+      // Risk is high, we NEED to schedule maintenance now.
       if (ms.used_hours + job.duration_hours + machine.maintenance_duration_hours <= ms.available_hours) {
         maintenanceWindow = {
           start_hour: slotEnd,
@@ -173,9 +181,9 @@ exports.optimize = async (input) => {
       end_hour: slotEnd,
       duration_hours: job.duration_hours,
       revenue: job.revenue || 0,
-      score,
-      failure_probability,
-      downtime_risk,
+      score, // Original score was used for sorting
+      failure_probability: actualFP,
+      downtime_risk: actualDowntimeRisk,
       maintenance_window: maintenanceWindow,
     });
   }

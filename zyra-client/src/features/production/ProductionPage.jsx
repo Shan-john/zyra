@@ -80,13 +80,24 @@ const riskFill  = r => r >= 70 ? "#EF4444" : r >= 40 ? "#F59E0B" : "#10B981";
 const statusBadge = s => ({ "Running":"bg-success-100 text-success-700","High Risk":"bg-danger-100 text-danger-700","Offline":"bg-surface-200 text-surface-600","Maintenance":"bg-warning-100 text-warning-700" }[s] || "bg-surface-100 text-surface-600");
 const woBadge   = s => ({ "In Progress":"bg-primary-100 text-primary-700","Queued":"bg-surface-100 text-surface-600","Complete":"bg-success-100 text-success-700" }[s] || "");
 
+const BLANK_M = {
+  name: "", type: "assembly", capacity: 8, status: "Running", operator: "", lastMaint: new Date().toISOString().split('T')[0],
+  sensorConfig: { baseTempC: 70, baseVibration: 2.0, baseEnergyKWh: 20, tempVariance: 5, vibVariance: 0.5, energyVariance: 3, degradationRate: 0.1 },
+  thresholds: { safeMaxTemp: 90, safeMaxVib: 4.0, baselineEnergy: 25, maintIntervalDays: 30 }
+};
+
 export default function ProductionPage() {
   const [machines, setMachines] = useState([]);
   const [orders, setOrders]     = useState([]);
   const [loading, setLoading]   = useState(true);
   const [expanded, setExpanded] = useState(null);
+  
+  // Modals
   const [woModal, setWoModal]   = useState(null);
   const [woForm, setWoForm]     = useState(BLANK_W);
+  const [machineModal, setMachineModal] = useState(false);
+  const [machineForm, setMachineForm]   = useState(BLANK_M);
+  
   const [showAllAlerts, setShowAllAlerts] = useState(false);
 
   // Hydrate from MongoDB
@@ -154,11 +165,27 @@ export default function ProductionPage() {
     }
   };
 
+  const handleSaveMachine = async () => {
+    try {
+      setLoading(true);
+      await api.createMachine({
+        ...machineForm,
+        machineId: `M-${Date.now().toString().slice(-4)}`
+      });
+      setMachineModal(false);
+      loadData();
+    } catch (err) {
+      console.error("Failed to save machine", err);
+      alert("Failed to save machine. Check console.");
+      setLoading(false);
+    }
+  };
+
   const critical = machines.filter(m => m.scored?.risk >= 70).length;
   const high     = machines.filter(m => m.scored?.risk >= 40 && m.scored?.risk < 70).length;
   const healthy  = machines.filter(m => m.scored?.risk < 40).length;
 
-  if (loading) {
+  if (loading && machines.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center text-primary-600">
         <span className="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full" />
@@ -170,7 +197,7 @@ export default function ProductionPage() {
   return (
     <div className="space-y-6 pb-12">
       {/* ─── Header ─── */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-surface-900 flex items-center gap-2"><Factory size={24} className="text-primary-600" /> Production Floor</h1>
           <p className="text-surface-500 text-sm mt-1 flex items-center gap-1.5">
@@ -178,7 +205,14 @@ export default function ProductionPage() {
             Risk scores auto-calculated from 30 days of sensor history (temperature, vibration, energy, maintenance).
           </p>
         </div>
-        <button onClick={() => { setWoForm(BLANK_W); setWoModal("add"); }} className="btn-primary flex items-center gap-2"><Plus size={18} />New Work Order</button>
+        <div className="flex items-center gap-3">
+          <button onClick={() => { setMachineForm(BLANK_M); setMachineModal(true); }} className="btn-secondary flex items-center gap-2 border-surface-300">
+            <Factory size={16} /> New Machine
+          </button>
+          <button onClick={() => { setWoForm(BLANK_W); setWoModal("add"); }} className="btn-primary flex items-center gap-2">
+            <Plus size={18} /> New Work Order
+          </button>
+        </div>
       </div>
 
       {/* ─── KPI Strip ─── */}
@@ -391,6 +425,47 @@ export default function ProductionPage() {
               <button disabled={loading} onClick={handleSaveWO} className="btn-primary flex items-center gap-2">
                 {loading && <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />}
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Machine Modal ─── */}
+      {machineModal && (
+        <div className="fixed inset-0 bg-surface-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="flex justify-between items-center p-5 border-b">
+              <h3 className="font-bold">Add New Machine</h3>
+              <button onClick={() => setMachineModal(false)} className="p-1 bg-surface-100 rounded-full"><X size={16} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-surface-700 mb-1">Machine Name</label>
+                <input type="text" placeholder="e.g. CNC Unit #4" value={machineForm.name} onChange={e => setMachineForm({...machineForm, name: e.target.value})} className="input-field w-full" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-surface-700 mb-1">Type</label>
+                  <select value={machineForm.type} onChange={e => setMachineForm({...machineForm, type: e.target.value})} className="input-field w-full">
+                    {["assembly","cnc","casting","welding","pressing","furnace"].map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-surface-700 mb-1">Capacity / hr</label>
+                  <input type="number" min="1" value={machineForm.capacity} onChange={e => setMachineForm({...machineForm, capacity: Number(e.target.value)})} className="input-field w-full" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-surface-700 mb-1">Assigned Operator</label>
+                <input type="text" placeholder="e.g. John Doe" value={machineForm.operator} onChange={e => setMachineForm({...machineForm, operator: e.target.value})} className="input-field w-full" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 p-5 border-t">
+              <button disabled={loading} onClick={() => setMachineModal(false)} className="btn-secondary">Cancel</button>
+              <button disabled={loading || !machineForm.name} onClick={handleSaveMachine} className="btn-primary flex items-center gap-2">
+                {loading && <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />}
+                Add Machine
               </button>
             </div>
           </div>
