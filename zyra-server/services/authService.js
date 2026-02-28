@@ -1,49 +1,78 @@
 const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+const bcrypt = require("bcryptjs");
+const { db } = require("../config/firebase");
+const { ref, get, set, child } = require("firebase/database");
 const { JWT_SECRET, JWT_EXPIRES_IN } = require("../config/env");
 
-const generateToken = (user) => {
-  return jwt.sign(
-    { id: user._id, email: user.email, role: user.role },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN }
+const ADMIN_SEED = {
+  id: "user-admin",
+  name: "Admin User",
+  email: "admin@zyra.com",
+  password: "", // will be set below with bcrypt hash
+  role: "admin",
+  department: "Management",
+  lastLogin: null,
+  createdAt: new Date().toISOString(),
+};
+
+// ─── JWT ──────────────────────────────────────────────────────────────────────
+const generateToken = (user) =>
+  jwt.sign(
+    { id: user.id, email: user.email, role: user.role },
+    JWT_SECRET || "zyra_secret_fallback",
+    { expiresIn: JWT_EXPIRES_IN || "7d" }
   );
+
+// ─── Seed admin user on first run ─────────────────────────────────────────────
+const ensureAdminExists = async () => {
+  const snap = await get(child(ref(db), "users/user-admin"));
+  if (!snap.exists()) {
+    const hash = await bcrypt.hash("Admin@123", 10);
+    await set(ref(db, "users/user-admin"), { ...ADMIN_SEED, password: hash });
+  }
 };
 
-/**
- * Register a new user.
- */
+// ─── Register ─────────────────────────────────────────────────────────────────
 exports.register = async ({ name, email, password, role, department }) => {
-  const existingUser = await User.findOne({ email });
-  if (existingUser) throw Object.assign(new Error("Email already registered"), { statusCode: 409 });
-
-  const user = await User.create({ name, email, password, role, department });
-  const token = generateToken(user);
-  return { user, token };
+  await ensureAdminExists();
+  const snap = await get(child(ref(db), "users"));
+  const users = snap.exists() ? Object.values(snap.val()) : [];
+  if (users.find(u => u.email === email)) {
+    throw Object.assign(new Error("Email already registered"), { statusCode: 409 });
+  }
+  const id = `user-${Date.now()}`;
+  const hash = await bcrypt.hash(password, 10);
+  const user = { id, name, email, password: hash, role: role || "staff", department: department || "", createdAt: new Date().toISOString() };
+  await set(ref(db, `users/${id}`), user);
+  const { password: _p, ...safeUser } = user;
+  const token = generateToken(safeUser);
+  return { user: safeUser, token };
 };
 
-/**
- * Login with email and password.
- */
+// ─── Login ────────────────────────────────────────────────────────────────────
 exports.login = async ({ email, password }) => {
-  const user = await User.findOne({ email }).select("+password");
+  await ensureAdminExists();
+  const snap = await get(child(ref(db), "users"));
+  if (!snap.exists()) throw Object.assign(new Error("Invalid credentials"), { statusCode: 401 });
+  const users = Object.values(snap.val());
+  const user = users.find(u => u.email === email);
   if (!user) throw Object.assign(new Error("Invalid credentials"), { statusCode: 401 });
 
-  const isMatch = await user.comparePassword(password);
+  const isMatch = await bcrypt.compare(password, user.password);
   if (!isMatch) throw Object.assign(new Error("Invalid credentials"), { statusCode: 401 });
 
-  user.lastLogin = new Date();
-  await user.save();
+  user.lastLogin = new Date().toISOString();
+  await set(ref(db, `users/${user.id}`), user);
 
-  const token = generateToken(user);
-  return { user, token };
+  const { password: _p, ...safeUser } = user;
+  const token = generateToken(safeUser);
+  return { user: safeUser, token };
 };
 
-/**
- * Get current user profile.
- */
+// ─── Get Profile ──────────────────────────────────────────────────────────────
 exports.getProfile = async (userId) => {
-  const user = await User.findById(userId);
-  if (!user) throw Object.assign(new Error("User not found"), { statusCode: 404 });
-  return user;
+  const snap = await get(ref(db, `users/${userId}`));
+  if (!snap.exists()) throw Object.assign(new Error("User not found"), { statusCode: 404 });
+  const { password: _p, ...safeUser } = snap.val();
+  return safeUser;
 };

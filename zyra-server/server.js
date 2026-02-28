@@ -9,7 +9,6 @@ const morgan = require("morgan");
 
 // Load environment config (must be first)
 const { PORT, NODE_ENV } = require("./config/env");
-const connectDB = require("./config/db");
 const corsOptions = require("./config/cors");
 const errorHandler = require("./middlewares/errorHandler");
 const { rateLimiter } = require("./middlewares/rateLimiter");
@@ -32,8 +31,6 @@ const schedulingRoutes = require("./routes/schedulingRoutes");
 const scheduleOptimizeRoutes = require("./routes/scheduleOptimizeRoutes");
 const explainabilityRoutes = require("./routes/explainabilityRoutes");
 
-// Import background jobs
-const reorderAlertJob = require("./jobs/reorderAlertJob");
 
 const app = express();
 
@@ -70,7 +67,7 @@ app.use("/api/v1/ai", aiRoutes);
 app.use("/api/v1/maintenance", maintenanceSimRoutes);
 app.use("/api/v1/scheduling", schedulingRoutes);
 app.use("/api/v1/explainability", explainabilityRoutes);
-app.use("/api/schedule", scheduleOptimizeRoutes); // Real-time dash endpoint
+app.use("/api/v1/schedule", scheduleOptimizeRoutes); // Real-time dash endpoint
 
 // ─── 404 Handler ───────────────────────────────────────────
 app.use((req, res) => {
@@ -84,17 +81,11 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // ─── Start Server ──────────────────────────────────────────
-const startServer = async () => {
+const startServer = () => {
   try {
-    await connectDB();
-
     app.listen(PORT, () => {
-      logger.info(`🚀 Zyra ERP Server running on port ${PORT} [${NODE_ENV}]`);
+      logger.info(`🚀 Zyra ERP Server running on port ${PORT} [${NODE_ENV}] — Firebase mode`);
     });
-
-    // Start background jobs
-    reorderAlertJob.start();
-    logger.info("Background jobs initialized");
   } catch (error) {
     logger.error("Failed to start server", { error: error.message });
     process.exit(1);

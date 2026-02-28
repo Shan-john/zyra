@@ -1,72 +1,87 @@
-const Inventory = require("../models/Inventory");
-const Product = require("../models/Product");
+const { db } = require("../config/firebase");
+const { ref, get, set, remove, child } = require("firebase/database");
 
-/**
- * Get all inventory items with pagination and filtering.
- */
-exports.getAll = async ({ page = 1, limit = 20, warehouse, search }) => {
-  const query = { isDeleted: false };
-  if (warehouse) query.warehouse = warehouse;
-  if (search) query.sku = { $regex: search, $options: "i" };
+// ─── Seed Data ────────────────────────────────────────────────────────────────
+const INVENTORY_SEED = [
+  { id: "INV-001", sku: "STL-4MM",  name: "Steel Rod 4mm",         category: "Raw Materials", warehouse: "WH-A", quantity: 2400, reorderPoint: 500,  unitPrice: 3.50,  unit: "kg",  isDeleted: false },
+  { id: "INV-002", sku: "ALU-SHEET",name: "Aluminium Sheet 2mm",   category: "Raw Materials", warehouse: "WH-A", quantity: 320,  reorderPoint: 100,  unitPrice: 12.00, unit: "pcs", isDeleted: false },
+  { id: "INV-003", sku: "COP-WIRE", name: "Copper Wire 1.5mm",     category: "Raw Materials", warehouse: "WH-B", quantity: 90,   reorderPoint: 200,  unitPrice: 8.75,  unit: "kg",  isDeleted: false },
+  { id: "INV-004", sku: "BRG-6201", name: "Ball Bearing 6201",     category: "Components",    warehouse: "WH-B", quantity: 1500, reorderPoint: 300,  unitPrice: 2.20,  unit: "pcs", isDeleted: false },
+  { id: "INV-005", sku: "GEAR-M2",  name: "Spur Gear Module 2",    category: "Components",    warehouse: "WH-A", quantity: 750,  reorderPoint: 200,  unitPrice: 5.80,  unit: "pcs", isDeleted: false },
+  { id: "INV-006", sku: "HYDR-OIL", name: "Hydraulic Oil 46",      category: "Consumables",   warehouse: "WH-C", quantity: 55,   reorderPoint: 100,  unitPrice: 18.00, unit: "L",   isDeleted: false },
+  { id: "INV-007", sku: "BOLT-M10", name: "Hex Bolt M10x30",       category: "Fasteners",     warehouse: "WH-C", quantity: 8000, reorderPoint: 1000, unitPrice: 0.15,  unit: "pcs", isDeleted: false },
+  { id: "INV-008", sku: "SEAL-OR",  name: "O-Ring Seal Pack",      category: "Consumables",   warehouse: "WH-C", quantity: 40,   reorderPoint: 80,   unitPrice: 3.25,  unit: "packs",isDeleted: false },
+];
 
-  const items = await Inventory.find(query)
-    .populate("product", "name sku category unitPrice")
-    .sort({ updatedAt: -1 })
-    .skip((page - 1) * limit)
-    .limit(limit)
-    .lean();
-
-  const total = await Inventory.countDocuments(query);
-  return { items, total, page, totalPages: Math.ceil(total / limit) };
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const getAll = async () => {
+  const snap = await get(child(ref(db), "inventory"));
+  if (!snap.exists()) return [];
+  return Object.values(snap.val());
 };
 
-/**
- * Get a single inventory item by ID.
- */
+const seedIfEmpty = async () => {
+  const snap = await get(child(ref(db), "inventory"));
+  if (!snap.exists()) {
+    for (const item of INVENTORY_SEED) {
+      await set(ref(db, `inventory/${item.id}`), item);
+    }
+  }
+};
+
+// ─── Get All ──────────────────────────────────────────────────────────────────
+exports.getAll = async ({ page = 1, limit = 20, warehouse, search } = {}) => {
+  await seedIfEmpty();
+  let items = (await getAll()).filter(i => !i.isDeleted);
+  if (warehouse) items = items.filter(i => i.warehouse === warehouse);
+  if (search)    items = items.filter(i => i.sku.toLowerCase().includes(search.toLowerCase()) || i.name.toLowerCase().includes(search.toLowerCase()));
+  items.sort((a, b) => a.name.localeCompare(b.name));
+  const total = items.length;
+  const start = (page - 1) * limit;
+  return { items: items.slice(start, start + Number(limit)), total, page, totalPages: Math.ceil(total / limit) };
+};
+
+// ─── Get By Id ────────────────────────────────────────────────────────────────
 exports.getById = async (id) => {
-  const item = await Inventory.findById(id).populate("product");
-  if (!item || item.isDeleted) throw Object.assign(new Error("Inventory item not found"), { statusCode: 404 });
-  return item;
+  const snap = await get(ref(db, `inventory/${id}`));
+  if (!snap.exists() || snap.val().isDeleted) {
+    throw Object.assign(new Error("Inventory item not found"), { statusCode: 404 });
+  }
+  return snap.val();
 };
 
-/**
- * Add a new inventory item.
- */
+// ─── Add Item ─────────────────────────────────────────────────────────────────
 exports.addItem = async (data) => {
-  // Check for duplicate SKU in same warehouse
-  const existing = await Inventory.findOne({ sku: data.sku, warehouse: data.warehouse, isDeleted: false });
+  const existing = (await getAll()).find(i => i.sku === data.sku && i.warehouse === data.warehouse && !i.isDeleted);
   if (existing) throw Object.assign(new Error("Item already exists in this warehouse"), { statusCode: 409 });
-
-  return Inventory.create(data);
+  const id = `INV-${Date.now()}`;
+  const item = { id, ...data, isDeleted: false };
+  await set(ref(db, `inventory/${id}`), item);
+  return item;
 };
 
-/**
- * Update an inventory item.
- */
+// ─── Update Item ──────────────────────────────────────────────────────────────
 exports.updateItem = async (id, data) => {
-  const item = await Inventory.findByIdAndUpdate(id, data, { new: true, runValidators: true });
-  if (!item) throw Object.assign(new Error("Inventory item not found"), { statusCode: 404 });
-  return item;
+  const snap = await get(ref(db, `inventory/${id}`));
+  if (!snap.exists()) throw Object.assign(new Error("Inventory item not found"), { statusCode: 404 });
+  const updated = { ...snap.val(), ...data };
+  await set(ref(db, `inventory/${id}`), updated);
+  return updated;
 };
 
-/**
- * Soft-delete an inventory item.
- */
+// ─── Delete Item (soft) ──────────────────────────────────────────────────────
 exports.deleteItem = async (id) => {
-  const item = await Inventory.findByIdAndUpdate(id, { isDeleted: true }, { new: true });
-  if (!item) throw Object.assign(new Error("Inventory item not found"), { statusCode: 404 });
-  return item;
+  const snap = await get(ref(db, `inventory/${id}`));
+  if (!snap.exists()) throw Object.assign(new Error("Inventory item not found"), { statusCode: 404 });
+  const updated = { ...snap.val(), isDeleted: true };
+  await set(ref(db, `inventory/${id}`), updated);
+  return updated;
 };
 
-/**
- * Get items below reorder point (alerts).
- */
+// ─── Alerts (below reorder point) ────────────────────────────────────────────
 exports.getAlerts = async () => {
-  return Inventory.find({
-    isDeleted: false,
-    $expr: { $lte: ["$quantity", "$reorderPoint"] },
-  })
-    .populate("product", "name sku")
-    .sort({ quantity: 1 })
-    .lean();
+  await seedIfEmpty();
+  const items = (await getAll()).filter(i => !i.isDeleted && i.quantity <= i.reorderPoint);
+  items.sort((a, b) => a.quantity - b.quantity);
+  return items;
 };
