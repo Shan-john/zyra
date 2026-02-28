@@ -1,14 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ShoppingCart, Plus, X, Edit2, Trash2, TrendingUp } from "lucide-react";
+import * as api from "../../api/salesApi";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
-const ORDERS_SEED = [
-  { id: 1, orderId: "SO-3001", customer: "ABB Industries",      product: "Steel Frame Set",    qty: 20,  unit: "units", value: 900000,  date: "2026-02-25", status: "Processing" },
-  { id: 2, orderId: "SO-3002", customer: "Larsen & Toubro",     product: "CNC Gear Assembly",  qty: 5,   unit: "sets",  value: 280000,  date: "2026-02-22", status: "Shipped"    },
-  { id: 3, orderId: "SO-3003", customer: "Bharat Forge",        product: "Hydraulic Cylinders",qty: 50,  unit: "units", value: 2100000, date: "2026-02-20", status: "Delivered"  },
-  { id: 4, orderId: "SO-3004", customer: "Godrej Aerospace",    product: "Titanium Rods",      qty: 30,  unit: "kg",    value: 1440000, date: "2026-02-27", status: "Processing" },
-  { id: 5, orderId: "SO-3005", customer: "Mahindra Defense",    product: "Heat Treated Panels",qty: 100, unit: "units", value: 500000,  date: "2026-02-15", status: "Delivered"  },
-];
+// ORDERS_SEED removed in favor of standard API usage
 
 const FORECAST_DATA = [
   { month: "Sep", actual: 42, forecast: 45 }, { month: "Oct", actual: 55, forecast: 52 },
@@ -28,20 +23,51 @@ const BLANK = { orderId: "", customer: "", product: "", qty: "", unit: "units", 
 const STATUSES = ["Processing","Shipped","Delivered","Cancelled"];
 
 export default function SalesPage() {
-  const [orders, setOrders] = useState(ORDERS_SEED);
+  const [orders, setOrders] = useState([]);
   const [modal, setModal]   = useState(null);
   const [form, setForm]     = useState(BLANK);
+  const [loading, setLoading] = useState(true);
 
-  const save = () => {
-    const e = { ...form, qty: Number(form.qty), value: Number(form.value) };
-    if (modal === "add") setOrders(p => [...p, { ...e, id: Date.now() }]);
-    else setOrders(p => p.map(o => o.id === form.id ? e : o));
-    setModal(null);
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const res = await api.getOrders({ limit: 100 });
+      setOrders(res.data.data.orders || res.data.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const totalRev    = orders.reduce((s, o) => s + o.value, 0);
-  const activeOrds  = orders.filter(o => o.status === "Processing" || o.status === "Shipped").length;
-  const deliveredRev = orders.filter(o => o.status === "Delivered").reduce((s, o) => s + o.value, 0);
+  useEffect(() => { loadData(); }, []);
+
+  const save = async () => {
+    try {
+      if (modal === "add") {
+        await api.createOrder({
+          orderNumber: form.orderId || `SO-${Date.now().toString().slice(-4)}`,
+          customer: { name: form.customer, email: "unknown@example.com", phone: "555-0000" },
+          items: [{ description: form.product, quantity: Number(form.qty), unitPrice: Number(form.value) / Number(form.qty || 1), discount: 0 }],
+          status: form.status,
+          orderDate: form.date || new Date().toISOString().split("T")[0],
+        });
+      }
+      setModal(null);
+      loadData();
+    } catch (err) {
+      console.error("Failed to save order", err);
+      alert("Failed to save.");
+    }
+  };
+
+  const totalRev    = orders.reduce((s, o) => s + (o.totalAmount || o.value || 0), 0);
+  const activeOrds  = orders.filter(o => o.status === "Processing" || o.status === "Shipped" || o.status === "processing" || o.status === "shipped").length;
+  const deliveredRev = orders.filter(o => o.status === "Delivered" || o.status === "delivered").reduce((s, o) => s + (o.totalAmount || o.value || 0), 0);
+
+  if (loading && orders.length === 0) {
+    return <div className="p-8 text-center text-surface-500">Loading Sales data...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -71,17 +97,27 @@ export default function SalesPage() {
               <tbody>
                 {orders.map(o => (
                   <tr key={o.id} className="border-b border-surface-100 hover:bg-surface-50 transition">
-                    <td className="py-3 px-4 font-mono text-xs">{o.orderId}</td>
-                    <td className="py-3 px-4 font-medium">{o.customer}</td>
-                    <td className="py-3 px-4 text-surface-600">{o.product}</td>
-                    <td className="py-3 px-4">{o.qty} {o.unit}</td>
-                    <td className="py-3 px-4 font-semibold text-success-600">₹{o.value.toLocaleString()}</td>
-                    <td className="py-3 px-4 text-surface-500">{o.date}</td>
+                    <td className="py-3 px-4 font-mono text-xs">{o.orderNumber || o.orderId}</td>
+                    <td className="py-3 px-4 font-medium">{o.customer?.name || o.customer}</td>
+                    <td className="py-3 px-4 text-surface-600">{o.items?.[0]?.description || o.product}</td>
+                    <td className="py-3 px-4">{o.items?.[0]?.quantity || o.qty} units</td>
+                    <td className="py-3 px-4 font-semibold text-success-600">₹{(o.totalAmount || o.value || 0).toLocaleString()}</td>
+                    <td className="py-3 px-4 text-surface-500">{o.orderDate || o.date}</td>
                     <td className="py-3 px-4"><span className={`text-xs px-2 py-1 rounded-full font-medium ${orderBadge(o.status)}`}>{o.status}</span></td>
                     <td className="py-3 px-4">
                       <div className="flex gap-2">
-                        <button onClick={() => { setForm({...o}); setModal("edit"); }} className="p-1.5 text-surface-400 hover:text-primary-600 hover:bg-primary-50 rounded transition"><Edit2 size={13} /></button>
-                        <button onClick={() => setOrders(p=>p.filter(x=>x.id!==o.id))} className="p-1.5 text-surface-400 hover:text-danger-600 hover:bg-danger-50 rounded transition"><Trash2 size={13} /></button>
+                        <button onClick={() => { 
+                          setForm({
+                            orderId: o.orderNumber || o.orderId,
+                            customer: o.customer?.name || o.customer,
+                            product: o.items?.[0]?.description || o.product,
+                            qty: o.items?.[0]?.quantity || o.qty,
+                            value: o.totalAmount || o.value,
+                            date: o.orderDate || o.date,
+                            status: o.status
+                          }); 
+                          setModal("edit"); 
+                        }} className="p-1.5 text-surface-400 hover:text-primary-600 hover:bg-primary-50 rounded transition"><Edit2 size={13} /></button>
                       </div>
                     </td>
                   </tr>

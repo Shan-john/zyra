@@ -1,5 +1,6 @@
 const { db } = require("../config/firebase");
 const { ref, get, set, remove, child } = require("firebase/database");
+const { appendToCSV } = require("../utils/csvExport");
 
 // ─── Machines (FIREBASE) ───────────────────────────────────────────────────
 exports.getMachines = async (query = {}) => {
@@ -25,6 +26,7 @@ exports.getMachines = async (query = {}) => {
 
 exports.createMachine = async (data) => {
   await set(ref(db, "machines/" + data.machineId), data);
+  appendToCSV("machines.csv", data);
   return data;
 };
 
@@ -68,6 +70,7 @@ exports.getWorkOrders = async (query = {}) => {
 
 exports.createWorkOrder = async (data) => {
   await set(ref(db, "workOrders/" + data.orderNumber), data);
+  appendToCSV("work_orders.csv", data);
   return data;
 };
 

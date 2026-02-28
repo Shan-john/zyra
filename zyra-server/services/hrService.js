@@ -1,5 +1,6 @@
 const { db } = require("../config/firebase");
 const { ref, get, set, push, remove, child } = require("firebase/database");
+const { appendToCSV } = require("../utils/csvExport");
 
 // ─── Seed Data ────────────────────────────────────────────────────────────────
 const EMPLOYEE_SEED = [
@@ -84,6 +85,7 @@ exports.addEmployee = async (data) => {
     throw Object.assign(new Error("Employee ID already exists"), { statusCode: 409 });
   }
   await set(ref(db, `employees/${data.employeeId}`), data);
+  appendToCSV("employees.csv", data);
   return data;
 };
 
@@ -125,6 +127,7 @@ exports.clockInOut = async (data) => {
     }
   }
   await set(ref(db, `attendance/${id}`), record);
+  appendToCSV("attendance.csv", record);
   return record;
 };
 

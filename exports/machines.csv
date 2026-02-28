@@ -1,0 +1,2 @@
+name,type,capacity,status,operator,lastMaint,sensorConfig,thresholds,machineId
+"CSV Test Machine","assembly",8100,"Running","John AI","2026-02-28","{""baseTempC"":70,""baseVibration"":2,""baseEnergyKWh"":20,""tempVariance"":5,""vibVariance"":0.5,""energyVariance"":3,""degradationRate"":0.1}","{""safeMaxTemp"":90,""safeMaxVib"":4,""baselineEnergy"":25,""maintIntervalDays"":30}","M-6849"

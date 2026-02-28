@@ -1,26 +1,10 @@
-const jwt = require("jsonwebtoken");
-const { JWT_SECRET } = require("../config/env");
-const ApiResponse = require("../utils/apiResponse");
-
 /**
- * Verify JWT token from Authorization header.
+ * Mock auth middleware to remove authentication.
+ * Injects a dummy admin user into every request.
  */
 const authMiddleware = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return ApiResponse.unauthorized(res, "No token provided");
-  }
-
-  const token = authHeader.split(" ")[1];
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return ApiResponse.unauthorized(res, "Invalid or expired token");
-  }
+  req.user = { id: "mock-admin-id", email: "admin@zyra.com", role: "admin", name: "System Admin" };
+  next();
 };
 
 module.exports = authMiddleware;

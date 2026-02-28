@@ -1,5 +1,6 @@
 const { db } = require("../config/firebase");
 const { ref, get, set, remove, child } = require("firebase/database");
+const { appendToCSV } = require("../utils/csvExport");
 
 // ─── Seed Data ────────────────────────────────────────────────────────────────
 const INVENTORY_SEED = [
@@ -57,6 +58,7 @@ exports.addItem = async (data) => {
   const id = `INV-${Date.now()}`;
   const item = { id, ...data, isDeleted: false };
   await set(ref(db, `inventory/${id}`), item);
+  appendToCSV("inventory.csv", item);
   return item;
 };
 

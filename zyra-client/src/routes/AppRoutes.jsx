@@ -1,5 +1,4 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
 
 // Feature pages (lazy-loadable in production)
 import DashboardPage from "../features/dashboard/DashboardPage";

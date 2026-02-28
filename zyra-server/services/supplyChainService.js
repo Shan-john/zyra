@@ -1,5 +1,6 @@
 const { db } = require("../config/firebase");
 const { ref, get, set, child } = require("firebase/database");
+const { appendToCSV } = require("../utils/csvExport");
 
 // ─── Seed Data ────────────────────────────────────────────────────────────────
 const SUPPLIER_SEED = [
@@ -50,6 +51,7 @@ exports.addSupplier = async (data) => {
   const id = `SUP-${Date.now()}`;
   const supplier = { id, code: id, ...data, isActive: true };
   await set(ref(db, `suppliers/${id}`), supplier);
+  appendToCSV("suppliers.csv", supplier);
   return supplier;
 };
 
@@ -68,6 +70,7 @@ exports.createPurchaseOrder = async (data) => {
   const id = `PO-${Date.now()}`;
   const po = { id, poNumber: id, ...data, status: "pending", orderDate: new Date().toISOString().split("T")[0] };
   await set(ref(db, `purchaseOrders/${id}`), po);
+  appendToCSV("purchase_orders.csv", po);
   return po;
 };
 
